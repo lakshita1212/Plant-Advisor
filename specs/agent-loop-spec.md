@@ -129,7 +129,15 @@ for tool_call in assistant_message.tool_calls:
 *The loop should stop when: (a) the LLM returns a response with no tool calls, OR (b) the MAX_TOOL_ROUNDS limit is reached. Describe how you will detect each condition and what you will return in each case.*
 
 ```
-[your answer here]
+To safely control the agent loop, I will track iterations using a counter variable (e.g., `current_round = 0`) initialized right before the loop starts. Inside a `while True:` block, the loop will evaluate two distinct exit criteria:
+
+1. Condition A: Success (No Tool Calls)
+   - How to detect: After fetching the `assistant_message = response.choices[0].message`, inspect the `tool_calls` attribute. If `not assistant_message.tool_calls` evaluates to True, it means the LLM is done gathering data and has formulated its final answer.
+   - What to return: Break the loop and return the extracted final text content from this response.
+
+2. Condition B: Safety Valve (MAX_TOOL_ROUNDS Reached)
+   - How to detect: At the end of each iteration where tools were successfully dispatched and appended, increment the counter (`current_round += 1`). Check if `current_round >= MAX_TOOL_ROUNDS`.
+   - What to return: If this threshold is hit, break the loop immediately to prevent an infinite API loop. Return a clean, user-friendly fallback string such as: "I've gathered as much information as possible, but I hit my search limit. Based on what I know..." or a standard error handler fallback if no text content was generated.
 ```
 
 ---
@@ -139,7 +147,10 @@ for tool_call in assistant_message.tool_calls:
 *Once the loop exits because there are no more tool calls, how do you extract the text content from the response object? What field holds the string you should return?*
 
 ```
-[your answer here]
+When the loop determines that `assistant_message.tool_calls` is empty or None, the final text response string resides inside the message's content property.
+
+- Exact path: `response.choices[0].message.content`
+- Access logic: I will grab `final_text = assistant_message.content`. Before returning, I will check if `final_text` is valid and not empty. If for some reason it is empty or None (e.g., a parsing anomaly), I will return a graceful fallback string to ensure the user always sees a readable answer.
 ```
 
 ---

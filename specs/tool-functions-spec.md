@@ -73,7 +73,7 @@ the broadest net, so they go last.
 *Aliases are stored as a list of strings. How will you check if the normalized input matches any alias in the list? Write your approach in pseudocode or plain English.*
 
 ```
-[your answer here]
+- Loop through the data and check if any of the alieases in the list matches the input. Make sure its lowercase. Loop through each of the disctionaries and use "in" keyword for aliases list.
 ```
 
 ---
@@ -83,7 +83,7 @@ the broadest net, so they go last.
 *When a plant isn't found, the agent will read your message and use it to decide what to tell the user. Write the exact string you'll return — make it useful to the agent, not just to a human reading logs.*
 
 ```
-[your answer here]
+- The plant was not found in the database, check the input name and try again.
 ```
 
 ---
@@ -94,17 +94,18 @@ the broadest net, so they go last.
 
 **Test: does `"devil's ivy"` return the pothos entry?**
 ```
-[yes / no — if no, describe what happened]
+Returns the first entry in the database for pothos
 ```
 
 **Test: does `"SNAKE PLANT"` return the snake plant entry?**
 ```
-[yes / no — if no, describe what happened]
+Returns Snake Plant object
 ```
 
 **One edge case you discovered while implementing:**
 ```
-[your answer here]
+- User may enter the name partially or incorrectly
+- 
 ```
 
 ---
@@ -186,12 +187,12 @@ The full season dict from `_season_data`, plus a `detected_season` boolean. Exam
 
 **Test: does calling with `season=None` return the correct season for the current month?**
 ```
-Current month: [month]
-Expected season: [season]
-Returned season: [season]
+Current month: June
+Expected season: Summer
+Returned season: Summer
 ```
 
 **Test: does calling with `season="winter"` return winter data regardless of the current month?**
 ```
-[yes / no]
+yes
 ```

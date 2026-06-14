@@ -65,14 +65,16 @@ TOOL_DEFINITIONS = [
 # ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = (
-    "You are a knowledgeable and friendly plant care advisor. "
+    "You are a knowledgeable and friendly plant care advisor. Make funny puns whenever possible "
     "Help users care for their houseplants by looking up specific plant information "
     "and current seasonal conditions using your available tools.\n\n"
-    "Always use your tools to look up plant-specific information before answering — "
-    "don't rely on your general knowledge alone. If a plant isn't in your database, "
-    "say so clearly and offer general guidance based on what the user describes.\n\n"
-    "Keep your advice practical and specific. Cite the source of your information "
-    "when you have it (e.g., 'According to the care data for your monstera...')."
+    "Always use your tools to look up plant-specific information before answering.\n\n"
+    "CRITICAL EDGE CASE INSTRUCTION:\n"
+    "If the lookup_plant tool returns {'found': false}, you MUST acknowledge explicitly "
+    "that the plant is not in your specific database. Do not invent exact care metrics. "
+    "Instead, gracefully degrade your service: ask the user to describe the plant's leaves "
+    "or environment, offer universal houseplant care tips (like checking soil moisture), "
+    "and suggest looking up the plant on a trusted botanical resource."
 )
 
 # ──────────────────────────────────────────────
@@ -107,29 +109,68 @@ def dispatch_tool(tool_name: str, tool_args: dict) -> str:
 def run_agent(user_message: str, history: list) -> str:
     """
     Run the plant care agent for one user turn and return its response.
-
-    TODO — Milestone 2:
-
-    The agent loop follows a specific pattern that you'll implement here. Read
-    specs/agent-loop-spec.md carefully before writing any code — understand the
-    full loop before implementing any part of it.
-
-    The loop works like this:
-      1. Build a messages list: system prompt + conversation history + new user message
-      2. Call the LLM with messages and TOOL_DEFINITIONS
-      3. If the response contains tool_calls:
-           a. Append the assistant message (with tool_calls) to messages
-           b. For each tool call: execute via dispatch_tool(), append the result
-           c. Call the LLM again with the updated messages
-           d. Repeat until no more tool_calls (or MAX_TOOL_ROUNDS is reached)
-      4. Return the final text response
-
-    Key details to get right:
-      - The assistant message must be appended BEFORE tool results
-      - Tool result messages use role="tool" with a tool_call_id field
-      - Append the assistant's message object directly (not just its content)
-      - The history format from Gradio: list of {"role": ..., "content": ...} dicts
-
-    Before writing code, complete specs/agent-loop-spec.md.
+    Loops until the LLM stops requesting tools, or MAX_TOOL_ROUNDS is hit.
     """
-    return "🌱 Agent not yet implemented. Complete Milestone 2 to activate the Plant Advisor."
+    # 1. Build messages list (System Prompt + Gradio History + New User Message)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    for msg in history:
+        # Explicitly copy only the keys required by the Groq API
+        messages.append({"role": msg["role"], "content": msg["content"]})
+
+    messages.append({"role": "user", "content": user_message})
+
+    # Track safety bounds to avoid infinite loops
+    current_round = 0
+
+    while True:
+        # 2. Query the LLM with the active conversation history and tools attached
+        response = _client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=messages,
+            tools=TOOL_DEFINITIONS,
+            tool_choice="auto",
+        )
+
+        assistant_message = response.choices[0].message
+
+        # Exit Condition A: Model has no tool calls, meaning it generated a final response
+        if not assistant_message.tool_calls:
+            final_text = assistant_message.content
+            if final_text:
+                return final_text
+            return "I generated an empty answer. Please try rephrasing your plant question!"
+
+        # 3. Handle tool execution: Append the assistant request message FIRST
+        messages.append(assistant_message)
+
+        # 4. Iterate over and process every tool call requested in this round
+        for tool_call in assistant_message.tool_calls:
+            tool_name = tool_call.function.name
+            raw_args = tool_call.function.arguments
+
+            # Clean and parse arguments safely (accounting for 'null' parameter variants)
+            try:
+                tool_args = json.loads(raw_args) if raw_args else {}
+            except json.JSONDecodeError:
+                tool_args = {}
+
+            if not isinstance(tool_args, dict):
+                tool_args = {}
+
+            # Invoke the local tool function
+            tool_result_json = dispatch_tool(tool_name, tool_args)
+
+            # Append the structured tool answer frame to the conversation history context
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_result_json,
+            })
+
+        # Exit Condition B: Enforce the maximum round threshold safety guard
+        current_round += 1
+        if current_round >= MAX_TOOL_ROUNDS:
+            if assistant_message.content:
+                return assistant_message.content
+            return "I have run out of lookup attempts trying to answer your question. Could you clarify what you're looking for?"
